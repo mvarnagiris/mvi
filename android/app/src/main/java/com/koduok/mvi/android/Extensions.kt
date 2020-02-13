@@ -1,7 +1,41 @@
 package com.koduok.mvi.android
 
 import android.view.View
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.coroutineScope
+import com.koduok.mvi.Mvi
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.DisposableHandle
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 
+/**
+ * Inside a view:
+ * ```
+ * mvi.callbacksOn(this) {
+ *     // This can be called multiple times on a view, because it can be attached/detached multiple times. Most commonly in RecyclerView.
+ *     onAttached { mvi ->
+ *         // Suspend function that will finish executing before collectStates starts.
+ *     }
+ *
+ *     collectStates { mvi, state ->
+ *         // Suspend function called every time state changes and once initially. Here you should be updating your view
+ *     }
+ *
+ *     // This can be called multiple times on a view, because it can be attached/detached multiple times. Most commonly in RecyclerView.
+ *     onDetached { mvi ->
+ *         // Simple function that is called when view is detached and CoroutineScope is destroyed.
+ *     }
+ * }
+ * ```
+ * If you have more than one callbacksOn block on a view, make sure to pass uniqueId for each block, otherwise only the last one will be registered.
+ */
 fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.callbacksOn(view: View, uniqueId: Any = "", callbacks: MviViewCallbacks<INPUT, STATE, MVI>.() -> Unit) {
     val mviCallbacks = MviViewCallbacks<INPUT, STATE, MVI>()
     callbacks(mviCallbacks)
@@ -16,11 +50,10 @@ fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.callbacksOn(view: View, uniqueId
     view.setTag(R.id.mvi_view_tag, onAttachStateChangeListener)
 }
 
-fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.collectStatesOn(view: View, uniqueId: Any = "", onState: suspend (MVI, STATE) -> Unit) {
+fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.collectStatesOn(view: View, uniqueId: Any = "", onState: suspend (MVI, STATE) -> Unit) =
     callbacksOn(view, uniqueId) {
         collectStates(onState)
     }
-}
 
 fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.callbacksOn(lifecycleOwner: LifecycleOwner, callbacks: MviLifecycleCallbacks<INPUT, STATE, MVI>.() -> Unit) {
     val mviCallbacks = MviLifecycleCallbacks<INPUT, STATE, MVI>()
@@ -33,38 +66,38 @@ fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.callbacksOn(lifecycleOwner: Life
             private var onStartJob: Job? = null
             private var onResumeJob: Job? = null
 
-            override fun onStateChanged(source: LifecycleOwner, event: Event) {
+            override fun onStateChanged(source: LifecycleOwner, event: Lifecycle.Event) {
                 @Suppress("NON_EXHAUSTIVE_WHEN")
                 when (event) {
-                    ON_CREATE -> {
+                    Lifecycle.Event.ON_CREATE -> {
                         mviCallbacks.onCreateBlock?.invoke(this@callbacksOn)
                         onCreateJob = mviCallbacks.collectStatesOnCreateBlock?.let { block ->
                             lifecycleOwner.lifecycle.coroutineScope.launch { states.collect { block(this@callbacksOn, it) } }
                         }
                     }
-                    ON_START -> {
+                    Lifecycle.Event.ON_START -> {
                         mviCallbacks.onStartBlock?.invoke(this@callbacksOn)
                         onStartJob = mviCallbacks.collectStatesOnStartBlock?.let { block ->
                             lifecycleOwner.lifecycle.coroutineScope.launch { states.collect { block(this@callbacksOn, it) } }
                         }
                     }
-                    ON_RESUME -> {
+                    Lifecycle.Event.ON_RESUME -> {
                         mviCallbacks.onResumeBlock?.invoke(this@callbacksOn)
                         onResumeJob = mviCallbacks.collectStatesOnResumeBlock?.let { block ->
                             lifecycleOwner.lifecycle.coroutineScope.launch { states.collect { block(this@callbacksOn, it) } }
                         }
                     }
-                    ON_PAUSE -> {
+                    Lifecycle.Event.ON_PAUSE -> {
                         onResumeJob?.cancel()
                         onResumeJob = null
                         mviCallbacks.onPauseBlock?.invoke(this@callbacksOn)
                     }
-                    ON_STOP -> {
+                    Lifecycle.Event.ON_STOP -> {
                         onStartJob?.cancel()
                         onStartJob = null
                         mviCallbacks.onStopBlock?.invoke(this@callbacksOn)
                     }
-                    ON_DESTROY -> {
+                    Lifecycle.Event.ON_DESTROY -> {
                         onCreateJob?.cancel()
                         onCreateJob = null
                         mviCallbacks.onDestroyBlock?.invoke(this@callbacksOn)
@@ -166,13 +199,14 @@ class MviLifecycleCallbacks<INPUT, STATE, MVI : Mvi<INPUT, STATE>> {
     }
 }
 
-private class OnAttachListenerForCoroutineScope(view: View) : OnAttachStateChangeListener {
+private class OnAttachListenerForCoroutineScope(view: View) : View.OnAttachStateChangeListener {
     private var currentCoroutineScope: CoroutineScope? = null
 
-    private val onAttachedBlocks = hashMapOf<Any, () -> Unit>()
+    private val onAttachedBlocks = hashMapOf<Any, suspend () -> Unit>()
     private val onDetachedBlocks = hashMapOf<Any, () -> Unit>()
     private val collectScopesBlocks = hashMapOf<Any, suspend () -> Unit>()
     private val runningJobs = hashMapOf<Any, Job>()
+    private val runningCompletions = hashMapOf<Any, DisposableHandle>()
 
     init {
         if (view.isAttachedToWindow) onViewAttachedToWindow(view)
@@ -180,34 +214,50 @@ private class OnAttachListenerForCoroutineScope(view: View) : OnAttachStateChang
 
     fun put(
         uniqueId: Any,
-        onAttachedBlock: () -> Unit,
+        onAttachedBlock: suspend () -> Unit,
         onDetachedBlock: () -> Unit,
         collectScopesBlock: suspend () -> Unit
     ) {
-        runningJobs.remove(uniqueId)?.cancel()
         onAttachedBlocks[uniqueId] = onAttachedBlock
         onDetachedBlocks[uniqueId] = onDetachedBlock
         collectScopesBlocks[uniqueId] = collectScopesBlock
 
-        val coroutineScope = currentCoroutineScope
-        if (coroutineScope != null) {
-            onAttachedBlock()
-            coroutineScope.launch { collectScopesBlock() }
-        }
+        onAttached(currentCoroutineScope, uniqueId, onAttachedBlock, collectScopesBlock)
     }
 
     override fun onViewAttachedToWindow(view: View) {
         val coroutineScope = currentCoroutineScope ?: CoroutineScope(SupervisorJob() + Dispatchers.Main)
         currentCoroutineScope = coroutineScope
+        collectScopesBlocks.forEach {
+            onAttached(coroutineScope, it.key, onAttachedBlocks[it.key]!!, it.value)
+        }
+    }
 
-        onAttachedBlocks.values.forEach { it() }
-        collectScopesBlocks.forEach { runningJobs[it.key] = coroutineScope.launch { it.value() } }
+    private fun onAttached(
+        coroutineScope: CoroutineScope?,
+        uniqueId: Any,
+        onAttachedBlock: suspend () -> Unit,
+        collectScopesBlock: suspend () -> Unit
+    ) {
+        runningCompletions.remove(uniqueId)?.dispose()
+        runningJobs.remove(uniqueId)?.cancel()
+        val job = coroutineScope?.launch {
+            onAttachedBlock()
+            collectScopesBlock()
+        }
+        val completion = job?.invokeOnCompletion {
+            runningJobs.remove(uniqueId)
+            runningCompletions.remove(uniqueId)?.dispose()
+        }
+        if (job != null) runningJobs[uniqueId] = job
+        if (completion != null) runningCompletions[uniqueId] = completion
     }
 
     override fun onViewDetachedFromWindow(view: View) {
         currentCoroutineScope?.cancel()
         currentCoroutineScope = null
         runningJobs.clear()
+        runningCompletions.clear()
         onDetachedBlocks.values.forEach { it() }
     }
 }
