@@ -2,12 +2,17 @@
 
 package com.koduok.mvi
 
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ConflatedBroadcastChannel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.launch
 import kotlinx.io.core.Closeable
 import kotlin.coroutines.CoroutineContext
 
@@ -36,6 +41,10 @@ abstract class Mvi<INPUT, STATE>(initialState: STATE) : CoroutineScope, Closeabl
     }
 
     protected abstract fun handleInput(input: INPUT): Flow<STATE>
+
+    protected fun launchUniqueIfNotRunning(uniqueJobId: Any, block: suspend () -> Unit): Job? {
+        return if (uniqueJobs[uniqueJobId] == null) launchUnique(uniqueJobId, block) else null
+    }
 
     protected fun launchUnique(uniqueJobId: Any, block: suspend () -> Unit): Job {
         val currentJob = uniqueJobs[uniqueJobId]
