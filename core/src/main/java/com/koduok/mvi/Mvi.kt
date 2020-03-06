@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import kotlinx.io.core.Closeable
+import java.io.Closeable
 import kotlin.coroutines.CoroutineContext
 
 abstract class Mvi<INPUT, STATE>(initialState: STATE) : CoroutineScope, Closeable {
