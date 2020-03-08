@@ -8,24 +8,18 @@ import androidx.lifecycle.coroutineScope
 import com.koduok.mvi.Mvi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.DisposableHandle
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
-fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.callbacksOn(
-    view: View,
-    id: Any = "",
-    callbacks: MviViewCallbacks<INPUT, STATE, MVI>.() -> Unit
-) {
+fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.callbacksOn(view: View, callbacks: MviViewCallbacks<INPUT, STATE, MVI>.() -> Unit) {
     val mviCallbacks = MviViewCallbacks<INPUT, STATE, MVI>()
     callbacks(mviCallbacks)
 
     val onAttachStateChangeListener = view.getTag(R.id.mvi_view_tag) as? OnAttachListenerForCoroutineScope ?: OnAttachListenerForCoroutineScope(view)
     onAttachStateChangeListener.put(
-        id,
         onAttachedBlock = { mviCallbacks.onAttachedBlock?.invoke(this) },
         onDetachedBlock = { mviCallbacks.onDetachedBlock?.invoke(this) },
         collectScopesBlock = { mviCallbacks.collectStatesBlock?.let { block -> states.collect { block(this, it) } } }
@@ -33,8 +27,8 @@ fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.callbacksOn(
     view.setTag(R.id.mvi_view_tag, onAttachStateChangeListener)
 }
 
-fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.collectStatesOn(view: View, id: Any = "", onState: suspend (MVI, STATE) -> Unit) =
-    callbacksOn(view, id) { collectStates(onState) }
+fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.collectStatesOn(view: View, onState: suspend (MVI, STATE) -> Unit) =
+    callbacksOn(view) { collectStates(onState) }
 
 fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.callbacksOn(lifecycleOwner: LifecycleOwner, callbacks: MviLifecycleCallbacks<INPUT, STATE, MVI>.() -> Unit) {
     val mviCallbacks = MviLifecycleCallbacks<INPUT, STATE, MVI>()
@@ -89,17 +83,14 @@ fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.callbacksOn(lifecycleOwner: Life
 fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.collectStatesOn(lifecycleOwner: LifecycleOwner, onState: suspend (MVI, STATE) -> Unit) =
     collectStatesOnResumeOn(lifecycleOwner, onState)
 
-fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.collectStatesOnCreateOn(lifecycleOwner: LifecycleOwner, onState: suspend (MVI, STATE) -> Unit) {
+fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.collectStatesOnCreateOn(lifecycleOwner: LifecycleOwner, onState: suspend (MVI, STATE) -> Unit) =
     callbacksOn(lifecycleOwner) { collectStatesOnCreate { mvi, state -> onState(mvi, state) } }
-}
 
-fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.collectStatesOnStartOn(lifecycleOwner: LifecycleOwner, onState: suspend (MVI, STATE) -> Unit) {
+fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.collectStatesOnStartOn(lifecycleOwner: LifecycleOwner, onState: suspend (MVI, STATE) -> Unit) =
     callbacksOn(lifecycleOwner) { collectStatesOnStart { mvi, state -> onState(mvi, state) } }
-}
 
-fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.collectStatesOnResumeOn(lifecycleOwner: LifecycleOwner, onState: suspend (MVI, STATE) -> Unit) {
+fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.collectStatesOnResumeOn(lifecycleOwner: LifecycleOwner, onState: suspend (MVI, STATE) -> Unit) =
     callbacksOn(lifecycleOwner) { collectStatesOnResume { mvi, state -> onState(mvi, state) } }
-}
 
 class MviViewCallbacks<INPUT, STATE, MVI : Mvi<INPUT, STATE>> {
     internal var onAttachedBlock: ((MVI) -> Unit)? = null
@@ -170,57 +161,42 @@ class MviLifecycleCallbacks<INPUT, STATE, MVI : Mvi<INPUT, STATE>> {
 private class OnAttachListenerForCoroutineScope(view: View) : View.OnAttachStateChangeListener {
     private var currentCoroutineScope: CoroutineScope? = null
 
-    private val onAttachedBlocks = hashMapOf<Any, suspend () -> Unit>()
-    private val onDetachedBlocks = hashMapOf<Any, () -> Unit>()
-    private val collectScopesBlocks = hashMapOf<Any, suspend () -> Unit>()
-    private val runningJobs = hashMapOf<Any, Job>()
-    private val runningCompletions = hashMapOf<Any, DisposableHandle>()
+    private val onAttachedBlocks = mutableSetOf<Pair<suspend () -> Unit, suspend () -> Unit>>()
+    private val onDetachedBlocks = mutableSetOf<() -> Unit>()
 
     init {
         if (view.isAttachedToWindow) onViewAttachedToWindow(view)
     }
 
-    fun put(id: Any, onAttachedBlock: suspend () -> Unit, onDetachedBlock: () -> Unit, collectScopesBlock: suspend () -> Unit) {
-        onAttachedBlocks[id] = onAttachedBlock
-        onDetachedBlocks[id] = onDetachedBlock
-        collectScopesBlocks[id] = collectScopesBlock
-
-        onAttached(currentCoroutineScope, id, onAttachedBlock, collectScopesBlock)
+    fun put(onAttachedBlock: suspend () -> Unit, onDetachedBlock: () -> Unit, collectScopesBlock: suspend () -> Unit) {
+        onDetachedBlocks.add(onDetachedBlock)
+        val coroutineScope = currentCoroutineScope
+        if (coroutineScope != null) {
+            coroutineScope.launch {
+                onAttachedBlock()
+                collectScopesBlock()
+            }
+        } else {
+            onAttachedBlocks.add(onAttachedBlock to collectScopesBlock)
+        }
     }
 
     override fun onViewAttachedToWindow(view: View) {
         val coroutineScope = currentCoroutineScope ?: CoroutineScope(SupervisorJob() + Dispatchers.Main)
         currentCoroutineScope = coroutineScope
-        collectScopesBlocks.forEach {
-            onAttached(coroutineScope, it.key, onAttachedBlocks[it.key]!!, it.value)
+        onAttachedBlocks.forEach {
+            coroutineScope.launch {
+                it.first()
+                it.second()
+            }
         }
-    }
-
-    private fun onAttached(
-        coroutineScope: CoroutineScope?,
-        uniqueId: Any,
-        onAttachedBlock: suspend () -> Unit,
-        collectScopesBlock: suspend () -> Unit
-    ) {
-        runningCompletions.remove(uniqueId)?.dispose()
-        runningJobs.remove(uniqueId)?.cancel()
-        val job = coroutineScope?.launch {
-            onAttachedBlock()
-            collectScopesBlock()
-        }
-        val completion = job?.invokeOnCompletion {
-            runningJobs.remove(uniqueId)
-            runningCompletions.remove(uniqueId)?.dispose()
-        }
-        if (job != null) runningJobs[uniqueId] = job
-        if (completion != null) runningCompletions[uniqueId] = completion
+        onAttachedBlocks.clear()
     }
 
     override fun onViewDetachedFromWindow(view: View) {
         currentCoroutineScope?.cancel()
         currentCoroutineScope = null
-        runningJobs.clear()
-        runningCompletions.clear()
-        onDetachedBlocks.values.forEach { it() }
+        onDetachedBlocks.forEach { it() }
+        onDetachedBlocks.clear()
     }
 }

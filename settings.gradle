@@ -1,2 +1,3 @@
+include ':android-shank'
 include ':android'
 include ':core'
