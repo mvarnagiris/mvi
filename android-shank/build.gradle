@@ -30,15 +30,13 @@ android {
     }
     kotlinOptions {
         jvmTarget = '1.8'
-    }
-    packagingOptions {
-        exclude("META-INF/*.kotlin_module")
+        freeCompilerArgs += ["-module-name", "mvi.android-shank"]
     }
 }
 
 dependencies {
     api project(path: ':android')
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-    implementation "com.github.mvarnagiris.shank:android:5b9f9b5f5f"
+    implementation "com.github.mvarnagiris.shank:android:e802edc323"
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.2.0"
 }
