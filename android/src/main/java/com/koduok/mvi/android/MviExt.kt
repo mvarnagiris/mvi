@@ -18,13 +18,18 @@ fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.callbacksOn(view: View, callback
     val mviCallbacks = MviViewCallbacks<INPUT, STATE, MVI>()
     callbacks(mviCallbacks)
 
-    val onAttachStateChangeListener = view.getTag(R.id.mvi_view_tag) as? OnAttachListenerForCoroutineScope ?: OnAttachListenerForCoroutineScope(view)
+    val currentOnAttachStateChangeListener = view.getTag(R.id.mvi_view_tag) as? OnAttachListenerForCoroutineScope
+    val onAttachStateChangeListener = currentOnAttachStateChangeListener ?: OnAttachListenerForCoroutineScope(view)
     onAttachStateChangeListener.put(
         onAttachedBlock = { mviCallbacks.onAttachedBlock?.invoke(this) },
         onDetachedBlock = { mviCallbacks.onDetachedBlock?.invoke(this) },
         collectScopesBlock = { mviCallbacks.collectStatesBlock?.let { block -> states.collect { block(this, it) } } }
     )
+
     view.setTag(R.id.mvi_view_tag, onAttachStateChangeListener)
+    if (currentOnAttachStateChangeListener == null) {
+        view.addOnAttachStateChangeListener(onAttachStateChangeListener)
+    }
 }
 
 fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.collectStatesOn(view: View, onState: suspend (MVI, STATE) -> Unit) =
