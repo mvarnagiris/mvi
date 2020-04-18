@@ -37,6 +37,6 @@ android {
 dependencies {
     api project(path: ':android')
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-    implementation "com.github.mvarnagiris.shank:android:e802edc323"
+    implementation "com.github.mvarnagiris.shank:android:c5d2a49eef"
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.2.0"
 }
