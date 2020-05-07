@@ -68,8 +68,8 @@ abstract class Mvi<INPUT, STATE>(initialState: STATE) : CoroutineScope, Closeabl
     }
 
     override fun close() {
+        coroutineContext.cancel()
         inputsChannel.close()
         statesChannel.close()
-        coroutineContext.cancel()
     }
 }
