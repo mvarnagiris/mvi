@@ -61,6 +61,8 @@ abstract class Mvi<INPUT, STATE>(initialState: STATE) : CoroutineScope, Closeabl
     }
 
     private fun setState(state: STATE) {
+        if (statesChannel.isClosedForSend) return
+
         val oldState = this.state
         if (state != oldState) {
             statesChannel.offer(state)
