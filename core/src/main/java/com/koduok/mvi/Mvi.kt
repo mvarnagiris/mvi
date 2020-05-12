@@ -12,6 +12,7 @@ import kotlinx.coroutines.channels.ConflatedBroadcastChannel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.Closeable
 import kotlin.coroutines.CoroutineContext
@@ -29,13 +30,17 @@ abstract class Mvi<INPUT, STATE>(initialState: STATE) : CoroutineScope, Closeabl
     init {
         launch {
             for (input in inputsChannel) {
-                handleInput(input).collect { setState(it) }
+                if (coroutineContext.isActive && !statesChannel.isClosedForSend)
+                    handleInput(input).collect { setState(it) }
+                else
+                    break
             }
         }
     }
 
     fun input(input: INPUT): Boolean {
         if (inputsChannel.isClosedForSend) return false
+
         inputsChannel.offer(input)
         return true
     }
