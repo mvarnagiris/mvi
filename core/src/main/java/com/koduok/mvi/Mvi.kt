@@ -10,6 +10,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ConflatedBroadcastChannel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.isActive
@@ -21,16 +23,16 @@ abstract class Mvi<INPUT, STATE>(initialState: STATE) : CoroutineScope, Closeabl
     override val coroutineContext: CoroutineContext by lazy { SupervisorJob() + Dispatchers.Main }
 
     private val inputsChannel by lazy { Channel<INPUT>(Channel.UNLIMITED) }
-    private val statesChannel by lazy { ConflatedBroadcastChannel(initialState) }
     private val uniqueJobs by lazy { hashMapOf<Any, Job>() }
 
-    val state: STATE get() = statesChannel.value
-    val states: Flow<STATE> get() = statesChannel.asFlow()
+    private val stateFlow = MutableStateFlow(initialState)
+    val states: StateFlow<STATE> get() = stateFlow
+    val state: STATE get() = stateFlow.value
 
     init {
         launch {
             for (input in inputsChannel) {
-                if (coroutineContext.isActive && !statesChannel.isClosedForSend)
+                if (coroutineContext.isActive)
                     handleInput(input).collect { setState(it) }
                 else
                     break
@@ -66,17 +68,11 @@ abstract class Mvi<INPUT, STATE>(initialState: STATE) : CoroutineScope, Closeabl
     }
 
     private fun setState(state: STATE) {
-        if (statesChannel.isClosedForSend) return
-
-        val oldState = this.state
-        if (state != oldState) {
-            statesChannel.offer(state)
-        }
+        stateFlow.value = state
     }
 
     override fun close() {
         coroutineContext.cancel()
         inputsChannel.close()
-        statesChannel.close()
     }
 }
