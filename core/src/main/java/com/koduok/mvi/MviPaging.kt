@@ -1,8 +1,10 @@
 package com.koduok.mvi
 
 import com.koduok.mvi.MviPaging.Input
+import com.koduok.mvi.MviPaging.Input.AddItems
 import com.koduok.mvi.MviPaging.Input.LoadNextPage
 import com.koduok.mvi.MviPaging.Input.Refresh
+import com.koduok.mvi.MviPaging.Input.RemoveItems
 import com.koduok.mvi.MviPaging.Input.SetFailedNextPage
 import com.koduok.mvi.MviPaging.Input.SetLoadedLastPage
 import com.koduok.mvi.MviPaging.Input.SetLoadedNextPage
@@ -26,6 +28,14 @@ import kotlinx.coroutines.flow.flowOf
 
 abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) {
 
+    fun prepend(vararg items: ITEM) = input(AddItems(0, items.toList()))
+    fun prepend(items: List<ITEM>) = input(AddItems(0, items))
+    fun append(vararg items: ITEM) = input(AddItems(state.items.size, items.toList()))
+    fun append(items: List<ITEM>) = input(AddItems(state.items.size, items))
+    fun add(position: Int, vararg items: ITEM) = input(AddItems(position, items.toList()))
+    fun add(position: Int, items: List<ITEM>) = input(AddItems(position, items))
+    fun remove(vararg items: ITEM) = input(RemoveItems(items.toList()))
+    fun remove(items: List<ITEM>) = input(RemoveItems(items))
     fun refresh() = input(Refresh)
     fun loadNextPage() = input(LoadNextPage)
 
@@ -38,6 +48,8 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
             is SetLoadedNextPage<*> -> flowOf(LoadedNextPage(input.allItems as List<ITEM>, input.loadedPage as List<ITEM>))
             is SetLoadedLastPage -> flowOf(LoadedLastPage(state.items))
             is SetFailedNextPage -> flowOf(FailedNextPage(state.items, input.cause))
+            is AddItems<*> -> flowOf(state.withAddedItems(input.position, input.items as List<ITEM>))
+            is RemoveItems<*> -> flowOf(state.withRemovedItems(input.items as List<ITEM>))
         }
     }
 
@@ -91,6 +103,8 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
         internal data class SetLoadedNextPage<ITEM>(val allItems: List<ITEM>, val loadedPage: List<ITEM>) : Input()
         internal object SetLoadedLastPage : Input()
         internal data class SetFailedNextPage(val cause: Exception) : Input()
+        internal data class AddItems<ITEM>(val position: Int, val items: List<ITEM>) : Input()
+        internal data class RemoveItems<ITEM>(val items: List<ITEM>) : Input()
     }
 
     sealed class State<ITEM> {
@@ -107,6 +121,23 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
                 is LoadedLastPage -> false
                 is FailedNextPage -> true
             }
+
+        fun withAddedItems(position: Int, items: List<ITEM>): State<ITEM> =
+            withItems(this.items.take(position) + items + this.items.takeLast(this.items.size - position))
+
+        fun withRemovedItems(items: List<ITEM>): State<ITEM> = withItems(this.items.minus(items))
+
+        private fun withItems(items: List<ITEM>): State<ITEM> = when (this) {
+            is Idle -> copy(items)
+            is Refreshing -> copy(items)
+            is Loaded -> copy(items)
+            is Failed -> copy(items)
+            is Empty -> copy(items)
+            is LoadingNextPage -> copy(items)
+            is LoadedNextPage -> copy(items)
+            is LoadedLastPage -> copy(items)
+            is FailedNextPage -> copy(items)
+        }
 
         data class Idle<ITEM>(override val items: List<ITEM> = emptyList()) : State<ITEM>()
         data class Refreshing<ITEM>(override val items: List<ITEM>) : State<ITEM>()
