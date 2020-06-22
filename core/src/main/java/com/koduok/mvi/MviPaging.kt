@@ -55,8 +55,11 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
                 val request = getRequest(REFRESH)
                 val page = getItems(request)
                 val items = pageToItems(request, page)
-                if (items.isEmpty()) emit(Empty())
-                else emit(Loaded(items))
+                when {
+                    items.isEmpty() -> emit(Empty())
+                    isLastPage(request, page, items) -> emit(LoadedLastPage(items))
+                    else -> emit(Loaded(items))
+                }
             } catch (e: Exception) {
                 emit(Failed(state.items, e))
             }
@@ -73,7 +76,7 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
                 val request = getRequest(NEXT_PAGE)
                 val page = getItems(request)
                 val items = pageToItems(request, page)
-                if (items.isEmpty()) input(SetLoadedLastPage)
+                if (isLastPage(request, page, items)) input(SetLoadedLastPage)
                 else input(SetLoadedNextPage(state.items + items, items))
             } catch (e: Exception) {
                 input(SetFailedNextPage(e))
@@ -96,6 +99,8 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
     protected abstract suspend fun getRequest(requestType: RequestType): REQUEST
     protected abstract suspend fun getItems(request: REQUEST): PAGE
     protected abstract suspend fun pageToItems(request: REQUEST, page: PAGE): List<ITEM>
+
+    open protected fun isLastPage(request: REQUEST, page: PAGE, loadedItems: List<ITEM>): Boolean = loadedItems.isEmpty()
 
     enum class RequestType { REFRESH, NEXT_PAGE }
 
