@@ -40,7 +40,7 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
             is LoadNextPage -> doLoadNextPage()
             is SetLoadingNextPage -> flowOf(LoadingNextPage(state.items))
             is SetLoadedNextPage<*> -> flowOf(LoadedNextPage(input.allItems as List<ITEM>, input.loadedPage as List<ITEM>))
-            is SetLoadedLastPage -> flowOf(LoadedLastPage(state.items))
+            is SetLoadedLastPage<*> -> flowOf(LoadedLastPage(input.allItems as List<ITEM>, input.loadedPage as List<ITEM>))
             is SetFailedNextPage -> flowOf(FailedNextPage(state.items, input.cause))
             is EditItems<*> -> doItemsEdit(input.itemsEdits as List<ItemsEdit<ITEM>>)
         }
@@ -57,7 +57,7 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
                 val items = pageToItems(request, page)
                 when {
                     items.isEmpty() -> emit(Empty())
-                    isLastPage(request, page, items) -> emit(LoadedLastPage(items))
+                    isLastPage(request, page, items) -> emit(LoadedLastPage(items, items))
                     else -> emit(Loaded(items))
                 }
             } catch (e: Exception) {
@@ -76,7 +76,7 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
                 val request = getRequest(NEXT_PAGE)
                 val page = getItems(request)
                 val items = pageToItems(request, page)
-                if (isLastPage(request, page, items)) input(SetLoadedLastPage)
+                if (isLastPage(request, page, items)) input(SetLoadedLastPage(state.items + items, items))
                 else input(SetLoadedNextPage(state.items + items, items))
             } catch (e: Exception) {
                 input(SetFailedNextPage(e))
@@ -100,7 +100,7 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
     protected abstract suspend fun getItems(request: REQUEST): PAGE
     protected abstract suspend fun pageToItems(request: REQUEST, page: PAGE): List<ITEM>
 
-    open protected fun isLastPage(request: REQUEST, page: PAGE, loadedItems: List<ITEM>): Boolean = loadedItems.isEmpty()
+    protected open fun isLastPage(request: REQUEST, page: PAGE, loadedItems: List<ITEM>): Boolean = loadedItems.isEmpty()
 
     enum class RequestType { REFRESH, NEXT_PAGE }
 
@@ -109,7 +109,7 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
         internal object LoadNextPage : Input()
         internal object SetLoadingNextPage : Input()
         internal data class SetLoadedNextPage<ITEM>(val allItems: List<ITEM>, val loadedPage: List<ITEM>) : Input()
-        internal object SetLoadedLastPage : Input()
+        internal data class SetLoadedLastPage<ITEM>(val allItems: List<ITEM>, val loadedPage: List<ITEM>) : Input()
         internal data class SetFailedNextPage(val cause: Exception) : Input()
         internal data class EditItems<ITEM>(val itemsEdits: List<ItemsEdit<ITEM>>) : Input()
     }
@@ -148,7 +148,7 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
         data class Empty<ITEM>(override val items: List<ITEM> = emptyList()) : State<ITEM>()
         data class LoadingNextPage<ITEM>(override val items: List<ITEM>) : State<ITEM>()
         data class LoadedNextPage<ITEM>(override val items: List<ITEM>, val page: List<ITEM>) : State<ITEM>()
-        data class LoadedLastPage<ITEM>(override val items: List<ITEM>) : State<ITEM>()
+        data class LoadedLastPage<ITEM>(override val items: List<ITEM>, val page: List<ITEM>) : State<ITEM>()
         data class FailedNextPage<ITEM>(override val items: List<ITEM>, val cause: Exception) : State<ITEM>()
     }
 
