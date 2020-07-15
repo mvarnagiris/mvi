@@ -67,7 +67,7 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
     }
 
     private fun doLoadNextPage(): Flow<State<ITEM>> {
-        if (!state.canLoadNextPage) return emptyFlow()
+        if (!canLoadNextPage(state)) return emptyFlow()
 
         launchUniqueIfNotRunning("next_page") {
             input(SetLoadingNextPage)
@@ -101,6 +101,7 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
     protected abstract suspend fun pageToItems(request: REQUEST, page: PAGE): List<ITEM>
 
     protected open fun isLastPage(request: REQUEST, page: PAGE, loadedItems: List<ITEM>): Boolean = loadedItems.isEmpty()
+    protected open fun canLoadNextPage(state: State<ITEM>) = state.canLoadNextPage
 
     enum class RequestType { REFRESH, NEXT_PAGE }
 
