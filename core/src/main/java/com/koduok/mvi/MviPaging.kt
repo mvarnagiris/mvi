@@ -30,8 +30,16 @@ import kotlinx.coroutines.flow.flowOf
 abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) {
 
     fun edit(vararg itemsEdit: ItemsEdit<ITEM>) = input(EditItems(itemsEdit.toList()))
-    fun refresh() = input(Refresh)
-    fun loadNextPage() = input(LoadNextPage)
+
+    fun refresh() {
+        if (state is Refreshing) return
+        input(Refresh)
+    }
+
+    fun loadNextPage() {
+        if (state is Refreshing || state is LoadingNextPage || state is LoadedLastPage) return
+        input(LoadNextPage)
+    }
 
     override fun handleInput(input: Input): Flow<State<ITEM>> {
         @Suppress("UNCHECKED_CAST")
