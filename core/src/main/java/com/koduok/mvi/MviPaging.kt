@@ -36,8 +36,8 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
         input(Refresh)
     }
 
-    fun loadNextPage() {
-        if (state is Refreshing || state is LoadingNextPage || state is LoadedLastPage) return
+    fun loadNextPage(force: Boolean = false) {
+        if (!force && (state is Refreshing || state is LoadingNextPage || state is LoadedLastPage)) return
         input(LoadNextPage)
     }
 
