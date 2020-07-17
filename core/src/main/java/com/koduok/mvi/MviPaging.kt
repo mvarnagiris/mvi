@@ -4,6 +4,7 @@ import com.koduok.mvi.MviPaging.Input
 import com.koduok.mvi.MviPaging.Input.EditItems
 import com.koduok.mvi.MviPaging.Input.LoadNextPage
 import com.koduok.mvi.MviPaging.Input.Refresh
+import com.koduok.mvi.MviPaging.Input.Reset
 import com.koduok.mvi.MviPaging.Input.SetFailedNextPage
 import com.koduok.mvi.MviPaging.Input.SetLoadedLastPage
 import com.koduok.mvi.MviPaging.Input.SetLoadedNextPage
@@ -41,6 +42,8 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
         input(LoadNextPage)
     }
 
+    fun reset() = input(Reset)
+
     override fun handleInput(input: Input): Flow<State<ITEM>> {
         @Suppress("UNCHECKED_CAST")
         return when (input) {
@@ -51,6 +54,7 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
             is SetLoadedLastPage<*> -> flowOf(LoadedLastPage(input.allItems as List<ITEM>, input.loadedPage as List<ITEM>))
             is SetFailedNextPage -> flowOf(FailedNextPage(state.items, input.cause))
             is EditItems<*> -> doItemsEdit(input.itemsEdits as List<ItemsEdit<ITEM>>)
+            is Reset -> flowOf(Idle())
         }
     }
 
@@ -121,6 +125,7 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
         internal data class SetLoadedLastPage<ITEM>(val allItems: List<ITEM>, val loadedPage: List<ITEM>) : Input()
         internal data class SetFailedNextPage(val cause: Exception) : Input()
         internal data class EditItems<ITEM>(val itemsEdits: List<ItemsEdit<ITEM>>) : Input()
+        internal object Reset : Input()
     }
 
     sealed class State<ITEM> {

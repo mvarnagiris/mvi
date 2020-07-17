@@ -112,6 +112,19 @@ class MviConcatPaging<ITEM>(
         }
     }
 
+    fun refresh() {
+        if (state is Refreshing) return
+
+        pagers.forEachIndexed { index, pager -> pagersStatus[pager] = index == 0 }
+        currentPager.refresh()
+    }
+
+    fun loadNextPage(force: Boolean = false) {
+        if (!force && (state is Refreshing || state is LoadingNextPage || state is LoadedLastPage)) return
+
+        currentPager.loadNextPage(force)
+    }
+
     @Suppress("UNCHECKED_CAST")
     override fun handleInput(input: Input): Flow<State<ITEM>> = when (input) {
         is SetState<*> -> flowOf(input.state as State<ITEM>)
@@ -122,6 +135,6 @@ class MviConcatPaging<ITEM>(
     private val MviPaging<*, *, *>.isCurrent get() = currentPager == this
 
     sealed class Input {
-        data class SetState<ITEM>(val state: State<ITEM>) : Input()
+        internal data class SetState<ITEM>(val state: State<ITEM>) : Input()
     }
 }
