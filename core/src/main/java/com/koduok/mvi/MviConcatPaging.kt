@@ -17,8 +17,7 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
-class MviConcatPaging<ITEM>(
-    private val map: (pager: MviPaging<*, *, *>, item: Any?) -> ITEM,
+abstract class MviConcatPaging<ITEM>(
     private vararg val pagers: MviPaging<*, *, *>
 ) : Mvi<Input, State<ITEM>>(Idle()) {
 
@@ -26,7 +25,7 @@ class MviConcatPaging<ITEM>(
     private val currentPager get() = pagers.last { pagersStatus[it] ?: false }
     private val nextPager get() = pagers.firstOrNull { !(pagersStatus[it] ?: false) }
     private val activePagers get() = pagers.takeWhile { pagersStatus[it] ?: false }
-    private val currentItems get() = activePagers.map { pager -> pager.state.items.map { map(pager, it) } }.flatten()
+    private suspend fun currentItems() = activePagers.map { pager -> map(pager, pager.state.items, true) }.flatten()
 
     init {
         pagers.forEach { pager ->
@@ -38,31 +37,31 @@ class MviConcatPaging<ITEM>(
                         is Idle -> if (pager.isFirst && pager.isCurrent) input(SetState(Idle<ITEM>()))
                         is Refreshing -> {
                             if (pager.isCurrent) {
-                                if (pager.isFirst) input(SetState(Refreshing(currentItems)))
-                                else input(SetState(LoadingNextPage(currentItems)))
+                                if (pager.isFirst) input(SetState(Refreshing(currentItems())))
+                                else input(SetState(LoadingNextPage(currentItems())))
                             } else {
-                                input(SetState(state.withItems(currentItems)))
+                                input(SetState(state.withItems(currentItems())))
                             }
                         }
                         is Loaded -> {
                             if (pager.isCurrent) {
-                                if (pager.isFirst) input(SetState(Loaded(currentItems)))
-                                else input(SetState(LoadedNextPage(currentItems, pagerState.items.map { map(pager, it) })))
+                                if (pager.isFirst) input(SetState(Loaded(currentItems())))
+                                else input(SetState(LoadedNextPage(currentItems(), map(pager, pagerState.items, true))))
                             } else {
-                                input(SetState(state.withItems(currentItems)))
+                                input(SetState(state.withItems(currentItems())))
                             }
                         }
                         is Failed -> {
                             if (pager.isCurrent) {
-                                if (pager.isFirst) input(SetState(Failed(currentItems, pagerState.cause)))
-                                else input(SetState(FailedNextPage(currentItems, pagerState.cause)))
+                                if (pager.isFirst) input(SetState(Failed(currentItems(), pagerState.cause)))
+                                else input(SetState(FailedNextPage(currentItems(), pagerState.cause)))
                             } else {
-                                input(SetState(state.withItems(currentItems)))
+                                input(SetState(state.withItems(currentItems())))
                             }
                         }
                         is Empty -> {
                             if (pager.isCurrent) {
-                                val items = currentItems
+                                val items = currentItems()
                                 when {
                                     pager.isLast && items.isEmpty() -> input(SetState(Empty(items)))
                                     pager.isLast -> input(SetState(LoadedLastPage(items, emptyList())))
@@ -73,37 +72,37 @@ class MviConcatPaging<ITEM>(
                                     }
                                 }
                             } else {
-                                input(SetState(state.withItems(currentItems)))
+                                input(SetState(state.withItems(currentItems())))
                             }
                         }
                         is LoadingNextPage -> {
                             if (pager.isCurrent) {
-                                input(SetState(LoadingNextPage(currentItems)))
+                                input(SetState(LoadingNextPage(currentItems())))
                             } else {
-                                input(SetState(state.withItems(currentItems)))
+                                input(SetState(state.withItems(currentItems())))
                             }
                         }
                         is LoadedNextPage -> {
                             if (pager.isCurrent) {
-                                input(SetState(LoadedNextPage(currentItems, pagerState.page.map { map(pager, it) })))
+                                input(SetState(LoadedNextPage(currentItems(), map(pager, pagerState.page, false))))
                             } else {
-                                input(SetState(state.withItems(currentItems)))
+                                input(SetState(state.withItems(currentItems())))
                             }
                         }
                         is LoadedLastPage -> {
                             if (pager.isCurrent) {
-                                if (pager.isLast) input(SetState(LoadedLastPage(currentItems, pagerState.page.map { map(pager, it) })))
+                                if (pager.isLast) input(SetState(LoadedLastPage(currentItems(), map(pager, pagerState.page, false))))
                                 else {
                                     val nextPager = nextPager!!
                                     pagersStatus[nextPager] = true
                                     nextPager.refresh()
                                 }
                             } else {
-                                input(SetState(state.withItems(currentItems)))
+                                input(SetState(state.withItems(currentItems())))
                             }
                         }
                         is FailedNextPage -> {
-                            if (pager.isCurrent) input(SetState(FailedNextPage(currentItems, pagerState.cause)))
+                            if (pager.isCurrent) input(SetState(FailedNextPage(currentItems(), pagerState.cause)))
                         }
                     }
 
@@ -119,10 +118,24 @@ class MviConcatPaging<ITEM>(
         currentPager.refresh()
     }
 
+    abstract suspend fun map(pager: MviPaging<*, *, *>, items: List<Any?>, isAllItems: Boolean): List<ITEM>
+
     fun loadNextPage(force: Boolean = false) {
         if (!force && (state is Refreshing || state is LoadingNextPage || state is LoadedLastPage)) return
 
         currentPager.loadNextPage(force)
+    }
+
+    private fun State<ITEM>.withItems(items: List<ITEM>): State<ITEM> = when (this) {
+        is Idle -> copy(items)
+        is Refreshing -> copy(items)
+        is Loaded -> copy(items)
+        is Failed -> copy(items)
+        is Empty -> copy(items)
+        is LoadingNextPage -> copy(items)
+        is LoadedNextPage -> copy(items)
+        is LoadedLastPage -> copy(items)
+        is FailedNextPage -> copy(items)
     }
 
     @Suppress("UNCHECKED_CAST")
