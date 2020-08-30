@@ -7,11 +7,11 @@ plugins {
 group = 'com.github.mvarnagiris'
 
 android {
-    compileSdkVersion 29
+    compileSdkVersion 30
 
     defaultConfig {
         minSdkVersion 21
-        targetSdkVersion 29
+        targetSdkVersion 30
         versionCode 1
         versionName "1.0"
 
@@ -37,7 +37,7 @@ android {
 dependencies {
     api project(path: ':android')
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
-    implementation "com.github.mvarnagiris.shank:android:7f6e784357"
+    implementation "com.github.mvarnagiris.shank:android:76fdbe8ffe"
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.2.0"
 }
 
