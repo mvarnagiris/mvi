@@ -68,7 +68,7 @@ abstract class MviPaging<ITEM, REQUEST, PAGE> : Mvi<Input, State<ITEM>>(Idle()) 
                 val page = getItems(request)
                 val items = pageToItems(request, page)
                 when {
-                    items.isEmpty() -> emit(Empty())
+                    items.isEmpty() -> emit(Empty<ITEM>())
                     isLastPage(request, page, items) -> emit(LoadedLastPage(items, items))
                     else -> emit(Loaded(items))
                 }
