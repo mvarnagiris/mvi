@@ -4,7 +4,7 @@ import android.view.View
 import com.koduok.mvi.Mvi
 import kotlinx.coroutines.flow.collect
 
-fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.callbacksOn(view: View, uniqueId: Any, callbacks: MviViewCallbacks<INPUT, STATE, MVI>.() -> Unit) {
+fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.callbacksOn(view: View, uniqueId: Any = this, callbacks: MviViewCallbacks<INPUT, STATE, MVI>.() -> Unit) {
     val mviCallbacks = MviViewCallbacks<INPUT, STATE, MVI>()
     callbacks(mviCallbacks)
 
@@ -23,5 +23,5 @@ fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.callbacksOn(view: View, uniqueId
     }
 }
 
-fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.collectStatesOn(view: View, uniqueId: Any, onState: suspend (MVI, STATE) -> Unit) =
+fun <INPUT, STATE, MVI : Mvi<INPUT, STATE>> MVI.collectStatesOn(view: View, uniqueId: Any = this, onState: suspend (MVI, STATE) -> Unit) =
     callbacksOn(view, uniqueId) { collectStates(onState) }
