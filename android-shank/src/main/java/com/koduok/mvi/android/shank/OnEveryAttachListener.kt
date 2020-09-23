@@ -8,14 +8,10 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
-internal class OnAttachListenerForReAttach(private val view: View) : OnAttachStateChangeListener {
+internal class OnEveryAttachListener(private val view: View) : OnAttachStateChangeListener {
     private val onAttachedBlocks = mutableMapOf<Any, () -> Unit>()
 
-    init {
-        if (view.isAttachedToWindow) onViewAttachedToWindow(view)
-    }
-
-    fun put(key: Any, onAttachedBlock: () -> Unit) {
+    fun replace(key: Any, onAttachedBlock: () -> Unit) {
         onAttachedBlocks[key] = onAttachedBlock
         if (view.isAttachedToWindow) onAttachedBlock()
     }

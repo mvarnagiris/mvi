@@ -4,6 +4,7 @@ import android.view.View
 import android.view.View.OnAttachStateChangeListener
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -11,23 +12,29 @@ import kotlinx.coroutines.launch
 internal class OnAttachListenerForCoroutineScope(view: View) : OnAttachStateChangeListener {
     private var currentCoroutineScope: CoroutineScope? = null
 
-    private val onAttachedBlocks = mutableSetOf<Pair<suspend () -> Unit, suspend () -> Unit>>()
-    private val onDetachedBlocks = mutableSetOf<() -> Unit>()
+    private val onAttachedBlocks = mutableMapOf<Any, Pair<suspend () -> Unit, suspend () -> Unit>>()
+    private val onDetachedBlocks = mutableMapOf<Any, () -> Unit>()
+    private val runningJobs = mutableMapOf<Any, Job>()
 
     init {
+        initializeCoroutineScopeIfAttached(view)
+    }
+
+    private fun initializeCoroutineScopeIfAttached(view: View) {
         if (view.isAttachedToWindow) onViewAttachedToWindow(view)
     }
 
-    fun put(onAttachedBlock: suspend () -> Unit, onDetachedBlock: () -> Unit, collectScopesBlock: suspend () -> Unit) {
-        onDetachedBlocks.add(onDetachedBlock)
+    fun replace(key: Any, onAttachedBlock: suspend () -> Unit, onDetachedBlock: () -> Unit, collectScopesBlock: suspend () -> Unit) {
+        runningJobs.remove(key)?.cancel()
+        onDetachedBlocks[key] = onDetachedBlock
         val coroutineScope = currentCoroutineScope
         if (coroutineScope != null) {
-            coroutineScope.launch {
+            runningJobs[key] = coroutineScope.launch {
                 onAttachedBlock()
                 collectScopesBlock()
             }
         } else {
-            onAttachedBlocks.add(onAttachedBlock to collectScopesBlock)
+            onAttachedBlocks[key] = onAttachedBlock to collectScopesBlock
         }
     }
 
@@ -35,9 +42,9 @@ internal class OnAttachListenerForCoroutineScope(view: View) : OnAttachStateChan
         val coroutineScope = currentCoroutineScope ?: CoroutineScope(SupervisorJob() + Dispatchers.Main)
         currentCoroutineScope = coroutineScope
         onAttachedBlocks.forEach {
-            coroutineScope.launch {
-                it.first()
-                it.second()
+            runningJobs[it.key] = coroutineScope.launch {
+                it.value.first()
+                it.value.second()
             }
         }
         onAttachedBlocks.clear()
@@ -46,7 +53,7 @@ internal class OnAttachListenerForCoroutineScope(view: View) : OnAttachStateChan
     override fun onViewDetachedFromWindow(view: View) {
         currentCoroutineScope?.cancel()
         currentCoroutineScope = null
-        onDetachedBlocks.forEach { it() }
+        onDetachedBlocks.values.forEach { it() }
         onDetachedBlocks.clear()
     }
 }

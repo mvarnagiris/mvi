@@ -1,3 +1,5 @@
+@file:Suppress("unused")
+
 package com.koduok.mvi.android.shank
 
 import android.view.View
@@ -20,13 +22,13 @@ import life.shank.android.AutoScoped
 import life.shank.android.onReadyFor
 
 private fun Any.doOnEveryAttach(view: View, block: () -> Unit) {
-    val currentOnAttachStateChangeListener = view.getTag(R.id.mvi_view_tag_for_re_attach) as? OnAttachListenerForReAttach
-    val onAttachStateChangeListener = currentOnAttachStateChangeListener ?: OnAttachListenerForReAttach(view)
-    onAttachStateChangeListener.put(this, block)
+    val currentOnEveryAttachListener = view.getTag(R.id.mvi_view_tag_for_re_attach) as? OnEveryAttachListener
+    val onEveryAttachListener = currentOnEveryAttachListener ?: OnEveryAttachListener(view)
+    onEveryAttachListener.replace(key = this, onAttachedBlock = block)
 
-    view.setTag(R.id.mvi_view_tag_for_re_attach, onAttachStateChangeListener)
-    if (currentOnAttachStateChangeListener == null) {
-        view.addOnAttachStateChangeListener(onAttachStateChangeListener)
+    view.setTag(R.id.mvi_view_tag_for_re_attach, onEveryAttachListener)
+    if (currentOnEveryAttachListener == null) {
+        view.addOnAttachStateChangeListener(onEveryAttachListener)
     }
 }
 
@@ -35,12 +37,12 @@ private fun Any.doOnEveryAttach(view: View, block: () -> Unit) {
 fun <INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider0<MVI>.callbacksOn(
     view: VIEW,
     callbacks: MviViewCallbacks<INPUT, STATE, MVI>.() -> Unit
-) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view) { it.callbacksOn(view, callbacks) } }
+) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view) { it.callbacksOn(view, this, callbacks) } }
 
 fun <INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider0<MVI>.collectStatesOn(
     view: VIEW,
     onState: suspend (MVI, STATE) -> Unit
-) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view) { it.collectStatesOn(view, onState) } }
+) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view) { it.collectStatesOn(view, this, onState) } }
 
 fun <INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider0<MVI>.callbacksOn(
     view: VIEW,
@@ -73,13 +75,13 @@ fun <P1, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider1<P1, MVI>.c
     view: VIEW,
     p1: P1,
     callbacks: MviViewCallbacks<INPUT, STATE, MVI>.() -> Unit
-) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1) { it.callbacksOn(view, callbacks) } }
+) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1) { it.callbacksOn(view, this, callbacks) } }
 
 fun <P1, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider1<P1, MVI>.collectStatesOn(
     view: VIEW,
     p1: P1,
     onState: suspend (MVI, STATE) -> Unit
-) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1) { it.collectStatesOn(view, onState) } }
+) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1) { it.collectStatesOn(view, this, onState) } }
 
 fun <P1, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider1<P1, MVI>.callbacksOn(
     view: VIEW,
@@ -118,14 +120,14 @@ fun <P1, P2, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider2<P1, P2
     p1: P1,
     p2: P2,
     callbacks: MviViewCallbacks<INPUT, STATE, MVI>.() -> Unit
-) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1, p2) { it.callbacksOn(view, callbacks) } }
+) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1, p2) { it.callbacksOn(view, this, callbacks) } }
 
 fun <P1, P2, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider2<P1, P2, MVI>.collectStatesOn(
     view: VIEW,
     p1: P1,
     p2: P2,
     onState: suspend (MVI, STATE) -> Unit
-) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1, p2) { it.collectStatesOn(view, onState) } }
+) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1, p2) { it.collectStatesOn(view, this, onState) } }
 
 fun <P1, P2, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider2<P1, P2, MVI>.callbacksOn(
     view: VIEW,
@@ -170,7 +172,7 @@ fun <P1, P2, P3, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider3<P1
     p2: P2,
     p3: P3,
     callbacks: MviViewCallbacks<INPUT, STATE, MVI>.() -> Unit
-) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1, p2, p3) { it.callbacksOn(view, callbacks) } }
+) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1, p2, p3) { it.callbacksOn(view, this, callbacks) } }
 
 fun <P1, P2, P3, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider3<P1, P2, P3, MVI>.collectStatesOn(
     view: VIEW,
@@ -178,7 +180,7 @@ fun <P1, P2, P3, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider3<P1
     p2: P2,
     p3: P3,
     onState: suspend (MVI, STATE) -> Unit
-) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1, p2, p3) { it.collectStatesOn(view, onState) } }
+) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1, p2, p3) { it.collectStatesOn(view, this, onState) } }
 
 fun <P1, P2, P3, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider3<P1, P2, P3, MVI>.callbacksOn(
     view: VIEW,
@@ -229,7 +231,7 @@ fun <P1, P2, P3, P4, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider
     p3: P3,
     p4: P4,
     callbacks: MviViewCallbacks<INPUT, STATE, MVI>.() -> Unit
-) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1, p2, p3, p4) { it.callbacksOn(view, callbacks) } }
+) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1, p2, p3, p4) { it.callbacksOn(view, this, callbacks) } }
 
 fun <P1, P2, P3, P4, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider4<P1, P2, P3, P4, MVI>.collectStatesOn(
     view: VIEW,
@@ -238,7 +240,7 @@ fun <P1, P2, P3, P4, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider
     p3: P3,
     p4: P4,
     onState: suspend (MVI, STATE) -> Unit
-) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1, p2, p3, p4) { it.collectStatesOn(view, onState) } }
+) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1, p2, p3, p4) { it.collectStatesOn(view, this, onState) } }
 
 fun <P1, P2, P3, P4, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider4<P1, P2, P3, P4, MVI>.callbacksOn(
     view: VIEW,
@@ -295,7 +297,7 @@ fun <P1, P2, P3, P4, P5, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProv
     p4: P4,
     p5: P5,
     callbacks: MviViewCallbacks<INPUT, STATE, MVI>.() -> Unit
-) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1, p2, p3, p4, p5) { it.callbacksOn(view, callbacks) } }
+) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1, p2, p3, p4, p5) { it.callbacksOn(view, this, callbacks) } }
 
 fun <P1, P2, P3, P4, P5, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider5<P1, P2, P3, P4, P5, MVI>.collectStatesOn(
     view: VIEW,
@@ -305,7 +307,7 @@ fun <P1, P2, P3, P4, P5, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProv
     p4: P4,
     p5: P5,
     onState: suspend (MVI, STATE) -> Unit
-) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1, p2, p3, p4, p5) { it.collectStatesOn(view, onState) } }
+) where VIEW : View, VIEW : AutoScoped = doOnEveryAttach(view) { onReadyFor(view, p1, p2, p3, p4, p5) { it.collectStatesOn(view, this, onState) } }
 
 fun <P1, P2, P3, P4, P5, INPUT, STATE, VIEW, MVI : Mvi<INPUT, STATE>> ScopedProvider5<P1, P2, P3, P4, P5, MVI>.callbacksOn(
     view: VIEW,
