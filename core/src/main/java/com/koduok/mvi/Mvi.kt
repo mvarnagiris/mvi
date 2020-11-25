@@ -57,7 +57,7 @@ abstract class Mvi<INPUT, STATE>(initialState: STATE, dispatcher: CoroutineDispa
         currentJob?.cancel()
 
         val job = launch { block() }
-        job.invokeOnCompletion { uniqueJobs.remove(uniqueJobId) }
+        job.invokeOnCompletion { if (uniqueJobs[uniqueJobId] == job) uniqueJobs.remove(uniqueJobId) }
         uniqueJobs[uniqueJobId] = job
         return job
     }
