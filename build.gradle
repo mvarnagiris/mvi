@@ -1,15 +1,13 @@
 buildscript {
-    ext.kotlin_version = "1.4.10"
-    ext.coroutines_version = "1.4.1"
+    ext.kotlin_version = "1.4.30"
+    ext.coroutines_version = "1.4.2"
     repositories {
         google()
         jcenter()
-        maven { url "https://dl.bintray.com/kotlin/kotlin-eap/" }
     }
     dependencies {
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
-        classpath 'com.android.tools.build:gradle:4.2.0-alpha15'
-        classpath 'com.github.dcendents:android-maven-gradle-plugin:2.1'
+        classpath 'com.android.tools.build:gradle:7.0.0-alpha08'
     }
 }
 
@@ -18,7 +16,6 @@ allprojects {
         google()
         jcenter()
         maven { url 'https://jitpack.io' }
-        maven { url "https://dl.bintray.com/kotlin/kotlin-eap/" }
     }
 }
 

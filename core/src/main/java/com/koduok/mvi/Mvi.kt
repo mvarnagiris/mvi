@@ -8,48 +8,62 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flatMapConcat
+import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.launch
 import java.io.Closeable
 import kotlin.coroutines.CoroutineContext
 
-abstract class Mvi<INPUT, STATE>(initialState: STATE, dispatcher: CoroutineDispatcher = Dispatchers.Main) : CoroutineScope, Closeable {
+abstract class Mvi<Input, State, Effect>(initialState: State, dispatcher: CoroutineDispatcher = Dispatchers.Main) : CoroutineScope, Closeable {
     override val coroutineContext: CoroutineContext = SupervisorJob() + dispatcher
 
-    private val inputsChannel by lazy { Channel<INPUT>(Channel.UNLIMITED) }
-    private val uniqueJobs by lazy { hashMapOf<Any, Job>() }
-
+    private val inputsFlow = MutableSharedFlow<Input>(extraBufferCapacity = Int.MAX_VALUE)
     private val stateFlow = MutableStateFlow(initialState)
-    val states: StateFlow<STATE> get() = stateFlow
-    val state: STATE get() = stateFlow.value
+    private val effectsFlow = MutableSharedFlow<Effect>(extraBufferCapacity = Int.MAX_VALUE)
+    private val uniqueJobs by lazy { hashMapOf<Any, Job>() }
+    val effects: SharedFlow<Effect> = effectsFlow.asSharedFlow()
+    val states: StateFlow<State> = stateFlow.asStateFlow()
+    val state: State get() = stateFlow.value
 
     init {
         launch {
-            for (input in inputsChannel) {
-                if (coroutineContext.isActive)
-                    handleInput(input).collect { setState(it) }
-                else
-                    break
+            inputsFlow
+                .flatMapConcat { handleInput(it) }
+                .collect { setState(it) }
+        }
+    }
+
+    fun input(input: Input) {
+        inputsFlow.tryEmit(input)
+    }
+
+    protected fun effect(effect: Effect) {
+        if (effectsFlow.subscriptionCount.value > 0) {
+            effectsFlow.tryEmit(effect)
+        } else {
+            launch {
+                effectsFlow.subscriptionCount
+                    .filter { it > 0 }
+                    .take(1)
+                    .collect { effectsFlow.tryEmit(effect) }
             }
         }
     }
 
-    fun input(input: INPUT): Boolean {
-        if (inputsChannel.isClosedForSend) return false
-
-        inputsChannel.offer(input)
-        return true
-    }
-
-    protected abstract fun handleInput(input: INPUT): Flow<STATE>
+    protected abstract fun handleInput(input: Input): Flow<State>
 
     protected fun launchUniqueIfNotRunning(uniqueJobId: Any, block: suspend () -> Unit): Job? {
-        return if (uniqueJobs[uniqueJobId] == null) launchUnique(uniqueJobId, block) else null
+        val currentJob = uniqueJobs[uniqueJobId]
+        return if (currentJob == null || currentJob.isCompleted) launchUnique(uniqueJobId, block) else null
     }
 
     protected fun launchUnique(uniqueJobId: Any, block: suspend () -> Unit): Job {
@@ -57,7 +71,11 @@ abstract class Mvi<INPUT, STATE>(initialState: STATE, dispatcher: CoroutineDispa
         currentJob?.cancel()
 
         val job = launch { block() }
-        job.invokeOnCompletion { if (uniqueJobs[uniqueJobId] == job) uniqueJobs.remove(uniqueJobId) }
+        job.invokeOnCompletion {
+            val jobForUniqueId = uniqueJobs[uniqueJobId]
+            if (job == jobForUniqueId)
+                uniqueJobs.remove(uniqueJobId)
+        }
         uniqueJobs[uniqueJobId] = job
         return job
     }
@@ -66,12 +84,12 @@ abstract class Mvi<INPUT, STATE>(initialState: STATE, dispatcher: CoroutineDispa
         uniqueJobs.remove(uniqueJobId)?.cancel()
     }
 
-    private fun setState(state: STATE) {
+    private fun setState(state: State) {
         stateFlow.value = state
     }
 
     override fun close() {
         coroutineContext.cancel()
-        inputsChannel.close()
+        uniqueJobs.clear()
     }
 }
