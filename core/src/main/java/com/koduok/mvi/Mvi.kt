@@ -26,7 +26,7 @@ import kotlin.coroutines.CoroutineContext
 abstract class Mvi<Input, State, Effect>(initialState: State, dispatcher: CoroutineDispatcher = Dispatchers.Main) : CoroutineScope, Closeable {
     override val coroutineContext: CoroutineContext = SupervisorJob() + dispatcher
 
-    private val inputsFlow = MutableSharedFlow<Input>(extraBufferCapacity = Int.MAX_VALUE)
+    private val inputsFlow = MutableSharedFlow<Input>(replay = Int.MAX_VALUE)
     private val stateFlow = MutableStateFlow(initialState)
     private val effectsFlow = MutableSharedFlow<Effect>(extraBufferCapacity = Int.MAX_VALUE)
     private val uniqueJobs by lazy { hashMapOf<Any, Job>() }
