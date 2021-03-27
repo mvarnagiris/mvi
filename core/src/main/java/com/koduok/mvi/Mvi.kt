@@ -23,7 +23,7 @@ import kotlinx.coroutines.launch
 import java.io.Closeable
 import kotlin.coroutines.CoroutineContext
 
-abstract class Mvi<Input, State, Effect>(initialState: State, dispatcher: CoroutineDispatcher = Dispatchers.Main) : CoroutineScope, Closeable {
+abstract class Mvi<Input, State, Effect>(initialState: State, dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate) : CoroutineScope, Closeable {
     override val coroutineContext: CoroutineContext = SupervisorJob() + dispatcher
 
     private val inputsFlow = MutableSharedFlow<Input>(replay = Int.MAX_VALUE)
